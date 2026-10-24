@@ -38,6 +38,15 @@ mod fallback {
     pub fn is_simulated() -> bool {
         true
     }
+    pub fn open_location(_path: &str) -> Result<(), String> {
+        Err("Only available on Windows".into())
+    }
+    pub fn open_apps_settings() -> Result<(), String> {
+        Err("Only available on Windows".into())
+    }
+    pub fn open_services() -> Result<(), String> {
+        Err("Only available on Windows".into())
+    }
 }
 #[cfg(not(windows))]
 pub use fallback::*;

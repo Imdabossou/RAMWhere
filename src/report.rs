@@ -91,3 +91,45 @@ pub fn json(snap: &Snapshot, owners: &HashMap<String, TagOwner>, deep: Option<&D
     }))
     .unwrap_or_default()
 }
+
+pub fn offender_text(o: &crate::culprits::Offender) -> String {
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "{} [{}]{}: total {} | in RAM {} | kernel {} | compressed/paged {}{}",
+        o.name,
+        o.kind.map(|k| k.label()).unwrap_or("App"),
+        if o.vendor.is_empty() { String::new() } else { format!(" ({})", o.vendor) },
+        fmt_bytes(o.total()),
+        fmt_bytes(o.private_ram),
+        fmt_bytes(o.kernel_pool),
+        fmt_bytes(o.compressed),
+        if o.vm > 0 { format!(" | VMs {}", fmt_bytes(o.vm)) } else { String::new() }
+    );
+    if !o.drivers.is_empty() {
+        let _ = writeln!(s, "   drivers: {}", o.drivers.join(", "));
+    }
+    if !o.tags.is_empty() {
+        let t: Vec<String> = o.tags.iter().take(6).map(|(t, b)| format!("'{t}' {}", fmt_bytes(*b))).collect();
+        let _ = writeln!(s, "   pool tags: {}", t.join(", "));
+    }
+    if let Some(g) = o.pool_growth.filter(|g| g.unsigned_abs() >= 1 << 20) {
+        let _ = writeln!(s, "   kernel growth since baseline: {}", crate::breakdown::fmt_delta(g));
+    }
+    let p: Vec<String> = o.processes.iter().take(6).map(|(n, pid, b)| format!("{n} ({pid}) {}", fmt_bytes(*b))).collect();
+    if !p.is_empty() {
+        let _ = writeln!(s, "   processes: {}", p.join(", "));
+    }
+    s
+}
+
+pub fn culprits(list: &[crate::culprits::Offender], unattributed_pool: u64) -> String {
+    let mut s = String::from("\n== What's using it (by product)\n");
+    for o in list.iter().take(15) {
+        s.push_str(&offender_text(o));
+    }
+    if unattributed_pool > 0 {
+        let _ = writeln!(s, "Kernel memory not tied to a driver: {}", fmt_bytes(unattributed_pool));
+    }
+    s
+}

@@ -2,6 +2,7 @@
 
 mod app;
 mod breakdown;
+mod culprits;
 mod model;
 mod platform;
 mod pooltags;

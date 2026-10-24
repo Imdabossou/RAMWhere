@@ -3,7 +3,7 @@
 use crate::breakdown::{self, fmt_bytes, fmt_delta, Breakdown, Category, Confidence, Finding, Group, Severity};
 use crate::model::*;
 use crate::theme::{self, card, palette, text_on};
-use crate::{platform, pooltags, report};
+use crate::{culprits, platform, pooltags, report};
 use eframe::egui::{self, Color32, RichText, Sense, Stroke};
 use egui_extras::{Column, TableBuilder};
 use std::collections::{HashMap, HashSet};
@@ -79,7 +79,7 @@ pub fn run(force_glow: bool) {
     // (winit doesn't allow a second event loop in the same process).
     if !force_glow {
         if let Ok(exe) = std::env::current_exe() {
-            if std::process::Command::new(exe).arg("--glow").spawn().is_ok() {
+            if std::process::Command::new(exe).args(std::env::args().skip(1)).arg("--glow").spawn().is_ok() {
                 return;
             }
         }
@@ -120,6 +120,7 @@ fn icon() -> egui::IconData {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
     Overview,
+    Culprits,
     Processes,
     Drivers,
     Deep,
@@ -221,6 +222,7 @@ impl App {
         let arg = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).map(|s| s.as_str());
         app.tab = match arg("--tab") {
             Some("processes") => Tab::Processes,
+            Some("culprits") => Tab::Culprits,
             Some("drivers") => Tab::Drivers,
             Some("deep") => Tab::Deep,
             Some("help") => Tab::Help,
@@ -299,6 +301,7 @@ impl App {
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let r = pooltags::scan(&platform::driver_files(), &want, descriptions());
+            driver_paths();
             let _ = tx.send(Msg::Owners(r));
             ctx.request_repaint();
         });
@@ -342,6 +345,10 @@ impl App {
                         if r.files_unreadable > 0 { format!(" ({} unreadable)", r.files_unreadable) } else { String::new() }
                     );
                     self.owners.extend(r.owners);
+                    if platform::is_simulated() {
+                        // The simulated machine's leaking tag belongs to a simulated CrowdStrike driver.
+                        self.owners.insert("Leak".into(), TagOwner { drivers: vec!["csagent.sys".into()], description: Some("Simulated leaking driver".into()) });
+                    }
                     self.maybe_scan_owners(ctx);
                 }
                 Msg::Deep(r) => {
@@ -372,7 +379,10 @@ impl App {
         let snap = self.snap.as_ref()?;
         let bd = self.breakdown()?;
         let f = breakdown::findings(snap, &bd, &self.owners);
-        Some(report::text(snap, &bd, &f, &self.owners, self.deep.as_deref()))
+        let (offenders, unattributed) = culprits::compute(snap, &self.owners, self.baseline.as_deref(), driver_paths());
+        let mut t = report::text(snap, &bd, &f, &self.owners, self.deep.as_deref());
+        t.push_str(&report::culprits(&offenders, unattributed));
+        Some(t)
     }
 
     fn save_report(&mut self) {
@@ -397,6 +407,20 @@ fn report_dir() -> PathBuf {
         }
     }
     std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf())).unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Lower-case driver file name -> full path, for "Open file location".
+fn driver_paths() -> &'static HashMap<String, String> {
+    static D: OnceLock<HashMap<String, String>> = OnceLock::new();
+    D.get_or_init(|| {
+        let mut m = HashMap::new();
+        for p in platform::driver_files() {
+            if let Some(n) = p.file_name() {
+                m.entry(n.to_string_lossy().to_ascii_lowercase()).or_insert_with(|| p.to_string_lossy().to_string());
+            }
+        }
+        m
+    })
 }
 
 fn descriptions() -> &'static HashMap<String, (String, String)> {
@@ -431,6 +455,8 @@ pub fn headless_report(out: &str, deep: bool) -> i32 {
     let bd = breakdown::compute(&snap, deep_res.as_ref());
     let f = breakdown::findings(&snap, &bd, &owners);
     let mut text = report::text(&snap, &bd, &f, &owners, deep_res.as_ref());
+    let (offenders, unattributed) = culprits::compute(&snap, &owners, None, driver_paths());
+    text.push_str(&report::culprits(&offenders, unattributed));
     if let Some(e) = deep_err {
         text.push_str(&format!("\nDeep Scan failed: {e}\n"));
     }
@@ -518,6 +544,7 @@ impl eframe::App for App {
                 ui.spacing_mut().item_spacing.x = 4.0;
                 for (t, label) in [
                     (Tab::Overview, "Overview"),
+                    (Tab::Culprits, "What's using it"),
                     (Tab::Processes, "Processes"),
                     (Tab::Drivers, "Drivers"),
                     (Tab::Deep, "Deep Scan"),
@@ -564,6 +591,7 @@ impl eframe::App for App {
             }
             match self.tab {
                 Tab::Overview => self.overview(ui),
+                Tab::Culprits => self.culprits_tab(ui),
                 Tab::Processes => self.processes(ui),
                 Tab::Drivers => self.drivers(ui),
                 Tab::Deep => self.deep_tab(ui, &ctx),
@@ -692,7 +720,9 @@ impl App {
             for f in &findings {
                 finding_card(ui, f);
             }
-            ui.add_space(10.0);
+            ui.add_space(6.0);
+            self.top_offenders_card(ui, &snap);
+            ui.add_space(14.0);
 
             let groups = [
                 (Group::InUse, "In use", "Taken right now"),
@@ -730,6 +760,197 @@ impl App {
                 for w in &snap.warnings {
                     ui.colored_label(severity_color(Severity::Notice), format!("Note: {w}"));
                 }
+            }
+        });
+    }
+
+    fn top_offenders_card(&mut self, ui: &mut egui::Ui, snap: &Snapshot) {
+        let pal = palette(ui);
+        let (list, _) = culprits::compute(snap, &self.owners, self.baseline.as_deref(), driver_paths());
+        let mut hidden: Vec<&culprits::Offender> = list.iter().filter(|o| o.hidden() >= 64 << 20).collect();
+        hidden.sort_by_key(|o| std::cmp::Reverse(o.hidden()));
+        if hidden.is_empty() {
+            return;
+        }
+        card(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Biggest hidden memory users").size(16.0).strong());
+                ui.label(RichText::new("memory Task Manager doesn't show under their name").color(pal.weak));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("See all and what to do").clicked() {
+                        self.tab = Tab::Culprits;
+                    }
+                });
+            });
+            ui.add_space(4.0);
+            for o in hidden.iter().take(3) {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&o.name).strong());
+                    if let Some(k) = o.kind {
+                        ui.label(RichText::new(k.label()).size(12.0).color(pal.weak));
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(format!("{} hidden", fmt_bytes(o.hidden()))).monospace().strong().color(color_for("unexplained")));
+                    });
+                });
+            }
+        });
+    }
+
+    fn culprits_tab(&mut self, ui: &mut egui::Ui) {
+        let snap = self.snap.clone().unwrap();
+        let pal = palette(ui);
+        let (list, unattributed) = culprits::compute(&snap, &self.owners, self.baseline.as_deref(), driver_paths());
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            ui.set_max_width(ui.available_width() - 14.0);
+            ui.label(RichText::new("What's using your memory, grouped by product").size(18.0).strong());
+            ui.label(
+                RichText::new(
+                    "Each entry adds up what a product uses across its processes and drivers. \"Hidden\" is memory that never appears \
+under its name in Task Manager: kernel memory held by its drivers, and its memory that Windows has compressed or paged out.",
+                )
+                .color(pal.weak),
+            );
+            if self.owner_scan_running {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new("Still matching kernel memory to drivers…").color(pal.weak));
+                });
+            }
+            ui.add_space(10.0);
+            for (i, o) in list.iter().take(25).enumerate() {
+                self.offender_card(ui, i, o);
+                ui.add_space(10.0);
+            }
+            if unattributed >= 64 << 20 {
+                ui.label(
+                    RichText::new(format!(
+                        "{} of kernel memory couldn't be tied to a specific driver. The Drivers tab lists those tags; searching a tag name online usually identifies it.",
+                        fmt_bytes(unattributed)
+                    ))
+                    .color(pal.weak),
+                );
+            }
+            ui.label(
+                RichText::new("Not shown per product: shared DLLs and mapped files (see the Overview / Deep Scan totals), the file cache, and standby memory, which is free for reuse anyway.")
+                    .color(pal.weak),
+            );
+        });
+    }
+
+    fn offender_card(&mut self, ui: &mut egui::Ui, i: usize, o: &culprits::Offender) {
+        let pal = palette(ui);
+        card(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{}.", i + 1)).size(16.0).color(pal.weak));
+                ui.label(RichText::new(&o.name).size(16.0).strong());
+                if let Some(k) = o.kind {
+                    let c = match k {
+                        culprits::Kind::Security | culprits::Kind::Vpn => color_for("nonpaged"),
+                        culprits::Kind::Oem | culprits::Kind::UnknownDriver => color_for("paged"),
+                        culprits::Kind::Windows => color_for("secure"),
+                        _ => pal.accent,
+                    };
+                    egui::Frame::new().fill(c.gamma_multiply(0.18)).corner_radius(8.0).inner_margin(egui::Margin::symmetric(7, 1)).show(ui, |ui| {
+                        ui.label(RichText::new(k.label()).size(11.5).strong().color(c));
+                    });
+                }
+                if !o.vendor.is_empty() && o.vendor != o.name {
+                    ui.label(RichText::new(&o.vendor).color(pal.weak));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(fmt_bytes(o.total())).size(16.0).strong().monospace());
+                });
+            });
+            ui.add_space(4.0);
+            // Composition bar: visible vs hidden parts.
+            let parts = [
+                ("In RAM, visible in Task Manager", o.private_ram, color_for("apps")),
+                ("Kernel memory (hidden)", o.kernel_pool, color_for("nonpaged")),
+                ("Compressed / paged out (hidden)", o.compressed, color_for("compression")),
+                ("Virtual machines", o.vm, color_for("vm")),
+            ];
+            let total = o.total().max(1);
+            let (bar, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 10.0), Sense::hover());
+            ui.painter().rect_filled(bar, 5.0, pal.track);
+            let mut x = bar.left();
+            for (_, b, c) in parts {
+                if b == 0 {
+                    continue;
+                }
+                let w = bar.width() * b as f32 / total as f32;
+                ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(x, bar.top()), egui::vec2(w, bar.height())), 0.0, c);
+                x += w;
+            }
+            ui.horizontal_wrapped(|ui| {
+                for (label, b, c) in parts {
+                    if b == 0 {
+                        continue;
+                    }
+                    let mut job = egui::text::LayoutJob::default();
+                    job.append("\u{2002}\u{2002}", 0.0, egui::TextFormat { font_id: egui::FontId::proportional(9.0), background: c, valign: egui::Align::Center, ..Default::default() });
+                    job.append(&format!("{label}: "), 6.0, egui::TextFormat { font_id: egui::FontId::proportional(12.5), color: pal.weak, ..Default::default() });
+                    job.append(&fmt_bytes(b), 0.0, egui::TextFormat { font_id: egui::FontId::monospace(12.5), color: pal.text, ..Default::default() });
+                    ui.label(job);
+                }
+                if let Some(g) = o.pool_growth.filter(|g| g.unsigned_abs() >= 1 << 20) {
+                    ui.label(RichText::new(format!("kernel {} since baseline", fmt_delta(g))).monospace().color(if g > 0 { color_for("nonpaged") } else { pal.weak }));
+                }
+            });
+            ui.add_space(4.0);
+            for a in &o.advice {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("•").strong().color(pal.accent));
+                    ui.add(egui::Label::new(a.as_str()).wrap());
+                });
+            }
+            ui.add_space(2.0);
+            ui.horizontal_wrapped(|ui| {
+                if let Some(p) = o.driver_paths.first() {
+                    if ui.button("Open file location").on_hover_text(p.as_str()).clicked() {
+                        let r = platform::open_location(p);
+                        if let Err(e) = r {
+                            self.set_status(e);
+                        }
+                    }
+                }
+                let removable = matches!(o.kind, Some(culprits::Kind::Oem | culprits::Kind::App | culprits::Kind::UnknownDriver | culprits::Kind::Vpn | culprits::Kind::Security) | None);
+                if removable && ui.button("Open Settings > Apps").on_hover_text(format!("Look for \"{}\" in the list", o.name)).clicked() {
+                    if let Err(e) = platform::open_apps_settings() {
+                        self.set_status(e);
+                    }
+                }
+                if !o.drivers.is_empty() && ui.button("Open Services").on_hover_text("Driver and service start-up settings").clicked() {
+                    if let Err(e) = platform::open_services() {
+                        self.set_status(e);
+                    }
+                }
+                if ui.button("Copy details").clicked() {
+                    ui.ctx().copy_text(report::offender_text(o));
+                    self.set_status(format!("Copied details for {}", o.name));
+                }
+            });
+            let mut details = Vec::new();
+            if !o.processes.is_empty() {
+                let ps: Vec<String> = o.processes.iter().take(8).map(|(n, pid, b)| format!("{n} ({pid}) {}", fmt_bytes(*b))).collect();
+                details.push(format!("Processes: {}{}", ps.join(", "), if o.processes.len() > 8 { format!(" +{} more", o.processes.len() - 8) } else { String::new() }));
+            }
+            if !o.drivers.is_empty() {
+                details.push(format!("Drivers: {}", o.drivers.join(", ")));
+            }
+            if !o.tags.is_empty() {
+                let ts: Vec<String> = o.tags.iter().take(8).map(|(t, b)| format!("'{t}' {}", fmt_bytes(*b))).collect();
+                details.push(format!("Pool tags: {}", ts.join(", ")));
+            }
+            if !details.is_empty() {
+                egui::CollapsingHeader::new(RichText::new("Details").color(pal.weak)).id_salt(("offender", &o.key)).show(ui, |ui| {
+                    for d in details {
+                        ui.add(egui::Label::new(RichText::new(d).size(12.5).color(pal.weak)).wrap());
+                    }
+                });
             }
         });
     }

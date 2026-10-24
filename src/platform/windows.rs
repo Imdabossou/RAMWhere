@@ -228,6 +228,33 @@ pub fn is_simulated() -> bool {
     false
 }
 
+fn shell_open(file: &str, params: Option<&str>) -> Result<(), String> {
+    let f = wide(file);
+    let verb = wide("open");
+    let p = params.map(wide);
+    let r = unsafe {
+        ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), f.as_ptr(), p.as_ref().map_or(std::ptr::null(), |p| p.as_ptr()), std::ptr::null(), SW_SHOWNORMAL)
+    };
+    if r as isize > 32 {
+        Ok(())
+    } else {
+        Err(format!("Couldn't open {file}"))
+    }
+}
+
+/// Opens Explorer with the file selected.
+pub fn open_location(path: &str) -> Result<(), String> {
+    shell_open("explorer.exe", Some(&format!("/select,\"{path}\"")))
+}
+
+pub fn open_apps_settings() -> Result<(), String> {
+    shell_open("ms-settings:appsfeatures", None)
+}
+
+pub fn open_services() -> Result<(), String> {
+    shell_open("services.msc", None)
+}
+
 // ------------------------------------------------------------------ level 1
 
 fn os_version() -> String {
