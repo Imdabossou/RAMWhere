@@ -12,7 +12,7 @@ mod theme;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if let Some(i) = args.iter().position(|a| a == "--report") {
-        let out = args.get(i + 1).cloned().unwrap_or_else(|| "ramwhere-report.txt".into());
+        let out = args.get(i + 1).cloned().unwrap_or_else(|| "RAMWhere-report.txt".into());
         let deep = args.iter().any(|a| a == "--deep");
         std::process::exit(app::headless_report(&out, deep));
     }

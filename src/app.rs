@@ -60,7 +60,7 @@ pub fn run(force_glow: bool) {
         .unwrap_or([1280.0, 860.0]);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("RAM Where")
+            .with_title("RAMWhere")
             .with_inner_size(size)
             .with_min_inner_size([760.0, 480.0])
             .with_icon(Arc::new(icon())),
@@ -68,7 +68,7 @@ pub fn run(force_glow: bool) {
         ..Default::default()
     };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        eframe::run_native("RAM Where", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+        eframe::run_native("RAMWhere", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
     }));
     let err = match result {
         Ok(Ok(())) => return,
@@ -84,7 +84,7 @@ pub fn run(force_glow: bool) {
             }
         }
     }
-    fatal(&format!("RAM Where couldn't start its window: {err}\n\nUse --report <file> for a text report instead."));
+    fatal(&format!("RAMWhere couldn't start its window: {err}\n\nUse --report <file> for a text report instead."));
 }
 
 fn fatal(msg: &str) {
@@ -92,7 +92,7 @@ fn fatal(msg: &str) {
     {
         use std::os::windows::ffi::OsStrExt;
         let w: Vec<u16> = std::ffi::OsStr::new(msg).encode_wide().chain(Some(0)).collect();
-        let t: Vec<u16> = std::ffi::OsStr::new("RAM Where").encode_wide().chain(Some(0)).collect();
+        let t: Vec<u16> = std::ffi::OsStr::new("RAMWhere").encode_wide().chain(Some(0)).collect();
         unsafe {
             windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(std::ptr::null_mut(), w.as_ptr(), t.as_ptr(), 0x10);
         }
@@ -389,7 +389,7 @@ impl App {
         let (Some(text), Some(snap)) = (self.report_text(), self.snap.clone()) else { return };
         let json = report::json(&snap, &self.owners, self.deep.as_deref());
         let dir = report_dir();
-        let stem = format!("ramwhere-{}-{}", snap.computer_name, snap.taken_at);
+        let stem = format!("RAMWhere-{}-{}", snap.computer_name, snap.taken_at);
         let txt = dir.join(format!("{stem}.txt"));
         let js = dir.join(format!("{stem}.json"));
         match std::fs::write(&txt, text).and_then(|_| std::fs::write(&js, json)) {
@@ -613,7 +613,7 @@ impl App {
             }
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                ui.label(RichText::new("RAM Where").size(19.0).strong());
+                ui.label(RichText::new("RAMWhere").size(19.0).strong());
                 ui.label(RichText::new("Where every byte of memory is going").size(11.5).color(pal.weak));
             });
             ui.add_space(14.0);
@@ -1599,6 +1599,6 @@ fn help(ui: &mut egui::Ui) {
             ui.label(body);
         }
         ui.add_space(12.0);
-        ui.weak(format!("RAM Where v{}. Command line: --report <file> [--deep] writes a text + JSON report without opening a window; --glow uses OpenGL instead of DirectX.", env!("CARGO_PKG_VERSION")));
+        ui.weak(format!("RAMWhere v{}. Command line: --report <file> [--deep] writes a text + JSON report without opening a window; --glow uses OpenGL instead of DirectX.", env!("CARGO_PKG_VERSION")));
     });
 }

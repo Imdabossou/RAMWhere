@@ -1,9 +1,13 @@
 [package]
 name = "ramwhere"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Shows where every byte of RAM on a Windows PC is going"
 license = "MIT"
+
+[[bin]]
+name = "RAMWhere"
+path = "src/main.rs"
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "wgpu", "x11", "wayland"] }

@@ -7,7 +7,7 @@ use std::fmt::Write;
 
 pub fn text(snap: &Snapshot, bd: &Breakdown, findings: &[Finding], owners: &HashMap<String, TagOwner>, deep: Option<&DeepScan>) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "RAM Where report v{}", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(s, "RAMWhere report v{}", env!("CARGO_PKG_VERSION"));
     let _ = writeln!(s, "{} | {} | admin: {} | VBS: {}", snap.computer_name, snap.os_version, snap.elevated, snap.vbs_running.map(|v| v.to_string()).unwrap_or("?".into()));
     let _ = writeln!(
         s,
