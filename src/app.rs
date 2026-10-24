@@ -15,7 +15,41 @@ use std::time::{Duration, Instant};
 
 const OWNER_SCAN_TOP: usize = 120;
 
+/// Marker that exists only while the GPU renderer is starting. If it survives to the next
+/// launch, the graphics driver crashed the process (e.g. Intel's Vulkan driver, igvk64.dll),
+/// which no in-process fallback can catch, so we go straight to OpenGL instead.
+fn renderer_marker() -> Option<PathBuf> {
+    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).or_else(|| std::env::temp_dir().into())?;
+    let dir = base.join("RAMWhere");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("gpu-renderer-starting"))
+}
+
+static RENDERER_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn renderer_started() {
+    if !RENDERER_OK.swap(true, Ordering::Relaxed) {
+        if let Some(m) = renderer_marker() {
+            let _ = std::fs::remove_file(m);
+        }
+    }
+}
+
 pub fn run(force_glow: bool) {
+    let marker = renderer_marker();
+    let crashed_before = marker.as_ref().is_some_and(|m| m.exists());
+    let force_glow = force_glow || crashed_before;
+    if !force_glow {
+        if let Some(m) = &marker {
+            let _ = std::fs::write(m, b"");
+        }
+    }
+    // Only use DirectX 12 on Windows. Probing Vulkan loads the vendor's Vulkan driver, and some
+    // (Intel igvk64.dll) crash outright while being enumerated.
+    #[cfg(windows)]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        std::env::set_var("WGPU_BACKEND", "dx12");
+    }
     let args: Vec<String> = std::env::args().collect();
     let size = args
         .iter()
@@ -465,6 +499,7 @@ fn ago(ts: u64) -> String {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        renderer_started();
         let ctx = ui.ctx().clone();
         self.poll(&ctx);
         if self.auto_refresh && self.last_refresh.elapsed().as_secs_f32() >= self.interval {

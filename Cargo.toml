@@ -1,6 +1,6 @@
 [package]
 name = "ramwhere"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Shows where every byte of RAM on a Windows PC is going"
 license = "MIT"
