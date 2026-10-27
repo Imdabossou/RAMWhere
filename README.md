@@ -1,6 +1,6 @@
 # RAMWhere
 
-<p align="center"><img src="assets/ramwhere.png" width="128" alt="RAMWhere icon"></p>
+<img src="assets/ramwhere.png" width="128" alt="RAMWhere icon">
 
 **Task Manager says 9 GB is in use, but its process list adds up to 1.4 GB. Where's the rest?**
 
