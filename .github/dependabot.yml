@@ -1,0 +1,11 @@
+# Proposes updates to the pinned GitHub Actions once a month, against development.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: development
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
