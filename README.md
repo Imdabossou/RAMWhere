@@ -33,7 +33,7 @@ Click **Restart as administrator** for the full picture (standby/modified lists 
 
 ## Status
 
-Early. Level 1 (the live counters) uses the same well-established kernel queries as Task Manager and Process
+Level 1 (the live counters) uses the same well-established kernel queries as Task Manager and Process
 Explorer. Deep Scan relies on undocumented interfaces and may not work on every Windows build; if it misbehaves,
 please open an issue with the output of **Copy report**. Product recognition uses a built-in list of common
 drivers and programs (`src/culprits.rs`); additions are welcome.
