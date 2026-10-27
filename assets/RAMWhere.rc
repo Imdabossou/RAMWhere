@@ -1,7 +1,7 @@
 1 ICON "RAMWhere.ico"
 1 VERSIONINFO
-FILEVERSION 0,2,1,0
-PRODUCTVERSION 0,2,1,0
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
@@ -9,8 +9,8 @@ BEGIN
     BEGIN
       VALUE "FileDescription", "RAMWhere - shows where your memory is going"
       VALUE "ProductName", "RAMWhere"
-      VALUE "FileVersion", "0.2.1"
-      VALUE "ProductVersion", "0.2.1"
+      VALUE "FileVersion", "1.0.0"
+      VALUE "ProductVersion", "1.0.0"
       VALUE "OriginalFilename", "RAMWhere.exe"
     END
   END
