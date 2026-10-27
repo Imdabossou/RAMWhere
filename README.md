@@ -1,5 +1,7 @@
 # RAMWhere
 
+<p align="center"><img src="assets/ramwhere.png" width="128" alt="RAMWhere icon"></p>
+
 **Task Manager says 9 GB is in use, but its process list adds up to 1.4 GB. Where's the rest?**
 
 RAMWhere is a small Windows app that accounts for every byte of RAM, including everything Task Manager
