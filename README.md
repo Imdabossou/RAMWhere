@@ -54,4 +54,4 @@ cargo build --release                                  # on Windows
 cargo run                                              # on Linux/macOS: runs against simulated data
 ```
 
-Written in Rust with [egui](https://github.com/emilk/egui). MIT licensed.
+Written in Rust with [egui](https://github.com/emilk/egui). Licensed under the [GPL-3.0-or-later](LICENSE).

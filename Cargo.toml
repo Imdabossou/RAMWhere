@@ -3,7 +3,7 @@ name = "ramwhere"
 version = "1.0.0"
 edition = "2021"
 description = "Shows where every byte of RAM on a Windows PC is going"
-license = "MIT"
+license = "GPL-3.0-or-later"
 
 [[bin]]
 name = "RAMWhere"
