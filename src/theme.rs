@@ -1,6 +1,8 @@
-//! Look and feel: one palette per theme. egui follows the Windows light/dark setting by
-//! default; the user can override it from the top bar.
+//! Look and feel: neutral greys plus the system accent, or monochrome without one. egui follows
+//! the system light/dark setting by default; the user can override it from the top bar.
+//! Severity and memory category colours live with their data and stay fixed: they carry meaning.
 
+use crate::system_accent;
 use eframe::egui::{self, Color32, CornerRadius, Stroke, Theme};
 
 #[derive(Clone, Copy)]
@@ -15,30 +17,47 @@ pub struct Palette {
 }
 
 pub const DARK: Palette = Palette {
-    bg: Color32::from_rgb(0x14, 0x16, 0x1b),
-    card: Color32::from_rgb(0x1d, 0x20, 0x27),
-    card_stroke: Color32::from_rgb(0x2b, 0x30, 0x3a),
-    text: Color32::from_rgb(0xe6, 0xe8, 0xec),
-    weak: Color32::from_rgb(0x96, 0x9f, 0xad),
-    accent: Color32::from_rgb(0x5b, 0x9b, 0xff),
-    track: Color32::from_rgb(0x2a, 0x2e, 0x37),
+    bg: Color32::from_gray(0x17),
+    card: Color32::from_gray(0x20),
+    card_stroke: Color32::from_gray(0x30),
+    text: Color32::from_gray(0xe8),
+    weak: Color32::from_gray(0xa0),
+    accent: Color32::from_gray(0xe6),
+    track: Color32::from_gray(0x2e),
 };
 
 pub const LIGHT: Palette = Palette {
-    bg: Color32::from_rgb(0xf3, 0xf4, 0xf7),
+    bg: Color32::from_gray(0xf4),
     card: Color32::WHITE,
-    card_stroke: Color32::from_rgb(0xdf, 0xe2, 0xe8),
-    text: Color32::from_rgb(0x1f, 0x23, 0x28),
-    weak: Color32::from_rgb(0x5f, 0x68, 0x73),
-    accent: Color32::from_rgb(0x25, 0x63, 0xeb),
-    track: Color32::from_rgb(0xe8, 0xeb, 0xf0),
+    card_stroke: Color32::from_gray(0xe2),
+    text: Color32::from_gray(0x22),
+    weak: Color32::from_gray(0x68),
+    accent: Color32::from_gray(0x1f),
+    track: Color32::from_gray(0xeb),
 };
+
+/// The base palette with the system accent in place, if the desktop reports one.
+fn with_accent(base: Palette, dark: bool) -> Palette {
+    match system_accent::get() {
+        Some(c) => Palette { accent: system_accent::readable(c, dark), ..base },
+        None => base,
+    }
+}
 
 pub fn palette(ui: &egui::Ui) -> Palette {
     if ui.visuals().dark_mode {
-        DARK
+        with_accent(DARK, true)
     } else {
-        LIGHT
+        with_accent(LIGHT, false)
+    }
+}
+
+/// Restyles the widgets if the system accent has changed since the last frame.
+pub fn refresh(ctx: &egui::Context, last: &mut Option<Color32>) {
+    let now = system_accent::get();
+    if now != *last {
+        *last = now;
+        apply(ctx);
     }
 }
 
@@ -56,13 +75,13 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.button_padding = egui::vec2(10.0, 5.0);
         style.spacing.interact_size.y = 26.0;
     });
-    for (theme, p) in [(Theme::Dark, DARK), (Theme::Light, LIGHT)] {
+    for (theme, p) in [(Theme::Dark, with_accent(DARK, true)), (Theme::Light, with_accent(LIGHT, false))] {
         ctx.style_mut_of(theme, |style| {
             let v = &mut style.visuals;
             v.panel_fill = p.bg;
             v.window_fill = p.card;
-            v.extreme_bg_color = if theme == Theme::Dark { Color32::from_rgb(0x10, 0x12, 0x16) } else { Color32::WHITE };
-            v.faint_bg_color = if theme == Theme::Dark { Color32::from_rgb(0x22, 0x26, 0x2e) } else { Color32::from_rgb(0xf6, 0xf7, 0xf9) };
+            v.extreme_bg_color = if theme == Theme::Dark { Color32::from_gray(0x12) } else { Color32::WHITE };
+            v.faint_bg_color = if theme == Theme::Dark { Color32::from_gray(0x26) } else { Color32::from_gray(0xf7) };
             v.override_text_color = Some(p.text);
             v.weak_text_color = Some(p.weak);
             v.hyperlink_color = p.accent;

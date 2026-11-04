@@ -158,6 +158,7 @@ enum Msg {
 }
 
 struct App {
+    last_accent: Option<Color32>,
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     snap: Option<Arc<Snapshot>>,
@@ -188,10 +189,12 @@ struct App {
 impl App {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         theme::apply(&cc.egui_ctx);
+        crate::system_accent::start(&cc.egui_ctx);
         cc.egui_ctx.set_theme(egui::ThemePreference::System);
 
         let (tx, rx) = channel();
         let mut app = App {
+            last_accent: None,
             tx,
             rx,
             snap: None,
@@ -525,6 +528,7 @@ fn ago(ts: u64) -> String {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        theme::refresh(ui.ctx(), &mut self.last_accent);
         renderer_started();
         let ctx = ui.ctx().clone();
         self.poll(&ctx);
@@ -655,7 +659,7 @@ impl App {
             let elevated = self.snap.as_ref().is_some_and(|s| s.elevated);
             if !elevated && !platform::is_simulated() {
                 ui.separator();
-                let b = egui::Button::new(RichText::new("Restart as administrator").strong().color(Color32::WHITE)).fill(pal.accent);
+                let b = egui::Button::new(RichText::new("Restart as administrator").strong().color(theme::text_on(pal.accent))).fill(pal.accent);
                 if ui.add(b).on_hover_text("Unlocks the standby/modified breakdown and Deep Scan").clicked() {
                     match platform::relaunch_elevated() {
                         Ok(()) => std::process::exit(0),

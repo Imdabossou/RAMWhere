@@ -7,6 +7,7 @@ mod model;
 mod platform;
 mod pooltags;
 mod report;
+mod system_accent;
 mod theme;
 
 fn main() {
