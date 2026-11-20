@@ -2,56 +2,27 @@
 
 **Task Manager says 9 GB is in use, but its process list adds up to 1.4 GB. Where's the rest?**
 
-RAMWhere is a small Windows app that accounts for every byte of RAM, including everything Task Manager
-never itemizes, and tells you which product is responsible and what you can do about it.
+RAMWhere is a small Windows app that accounts for every byte of RAM, tells you which product is using it, and what you can do about it.
 
 ![Overview](docs/overview.png)
 
-## What it shows
+## Features
 
-- **Overview**: a memory map of all installed RAM, plain-English findings, and every category with an explanation:
-  apps, kernel nonpaged/paged pool, Memory Compression, VBS (Secure System), WSL2/VMs, file cache, standby, modified,
-  free and hardware-reserved memory.
-- **What's using it**: memory grouped by product (drivers + processes), worst first, with the hidden part called out
-  and advice for each type: security software, VPN clients, hardware drivers, manufacturer utilities, VMs, browsers.
-- **Processes**: private, shared, total and committed memory, including the OS processes Task Manager hides.
-- **Drivers**: kernel pool tags matched to the driver files that allocate them.
-- **Deep Scan** (admin): walks the physical page database, the same source RAMMap uses, and splits memory into
-  mapped files, shared sections, page tables, driver-locked pages, NTFS metadata, kernel stacks and more.
-- **Set baseline**: every table gets a "Δ since baseline" column, so a leak stands out if you leave it running.
-- **Copy / Save report**: text and JSON summaries to paste into a ticket.
-- Light and dark mode, following the Windows setting.
+- **The whole picture**: a map of all your RAM, including the parts Task Manager never lists
+- **Plain-English findings**: what each kind of memory is and whether it's a problem
+- **Find the culprit**: memory grouped by product, like antivirus, VPNs, drivers or VMs, with advice for each
+- **Spot leaks**: set a baseline and see what grows while you leave it running
+- **Deep Scan**: a page-by-page breakdown when run as administrator
+- **Share a report** to paste into a support ticket
 
 ![What's using it](docs/whats-using-it.png)
 
 ## Download
 
-Grab `RAMWhere.exe` from the [latest release](../../releases/latest). It's a single exe for 64-bit Windows 10/11;
-nothing to install. It isn't code-signed, so SmartScreen will warn you: **More info → Run anyway**.
+Get `RAMWhere.exe` from the [latest release](../../releases/latest). It's a single file for 64-bit Windows 10 and 11, with nothing to install.
 
-Click **Restart as administrator** for the full picture (standby/modified lists and Deep Scan).
+It isn't code-signed yet, so SmartScreen will warn you: click **More info → Run anyway**. Then click **Restart as administrator** for the full picture.
 
-## Status
+## Licence
 
-Level 1 (the live counters) uses the same well-established kernel queries as Task Manager and Process
-Explorer. Deep Scan relies on undocumented interfaces and may not work on every Windows build; if it misbehaves,
-please open an issue with the output of **Copy report**. Product recognition uses a built-in list of common
-drivers and programs (`src/culprits.rs`); additions are welcome.
-
-## Command line
-
-- `RAMWhere.exe --report out.txt [--deep]`: write a text + JSON report without opening a window.
-- `RAMWhere.exe --glow`: use OpenGL instead of DirectX 12 (it falls back automatically if DirectX fails).
-
-Put Microsoft's `pooltag.txt` next to the exe for richer pool tag descriptions. It's picked up automatically when
-the Debugging Tools for Windows are installed.
-
-## Build
-
-```
-cargo build --release --target x86_64-pc-windows-gnu   # cross-compile from Linux with mingw-w64
-cargo build --release                                  # on Windows
-cargo run                                              # on Linux/macOS: runs against simulated data
-```
-
-Written in Rust with [egui](https://github.com/emilk/egui). Licensed under the [GPL-3.0-or-later](LICENSE).
+Free and open source under the [GNU GPL v3 or later](LICENSE). Want to build it yourself? See [BUILDING.md](BUILDING.md).
